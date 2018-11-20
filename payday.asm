@@ -25,10 +25,18 @@ BUTTON_UP       = %00001000
 BUTTON_DOWN     = %00000100
 BUTTON_LEFT     = %00000010
 BUTTON_RIGHT    = %00000001
-
     .rsset $0010
-joypad1_state   .rs 1
+joypad1_state       .rs 1
 
+    .rsset $0200
+sprite_player       .rs 4
+gun                 .rs 4
+
+    .rsset $0000
+SPRITE_Y            .rs 1
+SPRITE_TILE         .rs 1
+SPRITE_ATTRIB       .rs 1
+SPRITE_X            .rs 1
 
     .bank 0
     .org $C000
@@ -117,23 +125,23 @@ vblankwait2:
 
     ;Write sprite data for sprite 0
     LDA #120    ;Y pos
-    STA $0200
+    STA sprite_player + SPRITE_Y
     LDA #0      ;Tile number
-    STA $0201
+    STA sprite_player + SPRITE_TILE
     LDA #0      ;Attribute
-    STA $0202
+    STA sprite_player + SPRITE_ATTRIB
     LDA #128    ;X pos
-    STA $0203
+    STA sprite_player + SPRITE_X
 
     ;Write sprite data for sprite 1
     LDA #60    ;Y pos
-    STA $0204
+    STA gun + SPRITE_Y
     LDA #1      ;Tile number
-    STA $0205
+    STA gun + SPRITE_TILE
     LDA #1      ;Attribute
-    STA $0206
+    STA gun + SPRITE_ATTRIB
     LDA #190    ;X pos
-    STA $0207
+    STA gun + SPRITE_X
 
     LDA #%10000000 ;Enamble NMI
     STA PPUCTRL
@@ -168,16 +176,15 @@ ReadController:
     CPX #8 ;Compare if X is 8
     BNE ReadController
 
-
 ;React to RIGHT button
     LDA joypad1_state
     AND #BUTTON_RIGHT
     BEQ ReadRIGHT_Done ;if recieve input do this, else jump to ReadA_Done
     ;Increment x pos of sprite
-    LDA $0203
+    LDA sprite_player + SPRITE_X
     CLC
     ADC #1
-    STA $0203
+    STA sprite_player + SPRITE_X
 ReadRIGHT_Done: ;end if
 
 ;React to LEFT button
@@ -185,10 +192,10 @@ ReadRIGHT_Done: ;end if
     AND #BUTTON_LEFT
     BEQ ReadLEFT_Done ;if recieve input do this, else jump to ReadA_Done
     ;Decrement x pos of sprite
-    LDA $0203
+    LDA sprite_player + SPRITE_X
     SEC
     SBC #1
-    STA $0203
+    STA sprite_player + SPRITE_X
 ReadLEFT_Done: ;end if
 
 ;React to UP button
@@ -196,10 +203,10 @@ ReadLEFT_Done: ;end if
     AND #BUTTON_UP
     BEQ ReadUP_Done ;if recieve input do this, else jump to ReadA_Done
     ;Decrement Y pos of sprite
-    LDA $0200
+    LDA sprite_player + SPRITE_Y
     SEC
     SBC #1
-    STA $0200
+    STA sprite_player + SPRITE_Y
 ReadUP_Done: ;end if
 
 ;React to DOWN button
@@ -207,10 +214,10 @@ ReadUP_Done: ;end if
     AND #BUTTON_DOWN
     BEQ ReadDOWN_Done ;if recieve input do this, else jump to ReadA_Done
     ;Increment Y pos of sprite
-    LDA $0200
+    LDA sprite_player + SPRITE_Y
     CLC
     ADC #1
-    STA $0200
+    STA sprite_player + SPRITE_Y
 ReadDOWN_Done: ;end if
 
 
