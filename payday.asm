@@ -17,6 +17,19 @@ OAMDMA    = $4014
 JOYPAD1   = $4016
 JOYPAD2   = $4017
 
+BUTTON_A        = %10000000
+BUTTON_B        = %01000000
+BUTTON_SELECT   = %00100000
+BUTTON_START    = %00010000
+BUTTON_UP       = %00001000
+BUTTON_DOWN     = %00000100
+BUTTON_LEFT     = %00000010
+BUTTON_RIGHT    = %00000001
+
+    .rsset $0010
+joypad1_state   .rs 1
+
+
     .bank 0
     .org $C000
 
@@ -143,27 +156,62 @@ NMI:
     STA JOYPAD1
     LDA #0
     STA JOYPAD1
-;Read A button
+
+    ;Read JOYPAD1 state
+    LDX #0 ;X=0
+    STX joypad1_state
+ReadController:
     LDA JOYPAD1
-    AND #%00000001
-    BEQ ReadA_Done ;if recieve input do this, else jump to ReadA_Done
+    LSR A
+    ROL joypad1_state
+    INX
+    CPX #8 ;Compare if X is 8
+    BNE ReadController
+
+
+;React to RIGHT button
+    LDA joypad1_state
+    AND #BUTTON_RIGHT
+    BEQ ReadRIGHT_Done ;if recieve input do this, else jump to ReadA_Done
     ;Increment x pos of sprite
     LDA $0203
     CLC
     ADC #1
     STA $0203
-ReadA_Done: ;end if
+ReadRIGHT_Done: ;end if
 
-;Read B button
-    LDA JOYPAD1
-    AND #%00000001
-    BEQ ReadB_Done ;if recieve input do this, else jump to ReadA_Done
-    ;Increment x pos of sprite
+;React to LEFT button
+    LDA joypad1_state
+    AND #BUTTON_LEFT
+    BEQ ReadLEFT_Done ;if recieve input do this, else jump to ReadA_Done
+    ;Decrement x pos of sprite
     LDA $0203
-    CLC
-    ADC #-1
+    SEC
+    SBC #1
     STA $0203
-ReadB_Done: ;end if
+ReadLEFT_Done: ;end if
+
+;React to UP button
+    LDA joypad1_state
+    AND #BUTTON_UP
+    BEQ ReadUP_Done ;if recieve input do this, else jump to ReadA_Done
+    ;Decrement Y pos of sprite
+    LDA $0200
+    SEC
+    SBC #1
+    STA $0200
+ReadUP_Done: ;end if
+
+;React to DOWN button
+    LDA joypad1_state
+    AND #BUTTON_DOWN
+    BEQ ReadDOWN_Done ;if recieve input do this, else jump to ReadA_Done
+    ;Increment Y pos of sprite
+    LDA $0200
+    CLC
+    ADC #1
+    STA $0200
+ReadDOWN_Done: ;end if
 
 
 
