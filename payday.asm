@@ -80,6 +80,24 @@ vblankwait2:
     LDA #3
     STA PPUDATA
 
+    ; Write the pallet color
+    LDA #$15
+    STA PPUDATA
+    LDA #$20
+    STA PPUDATA
+    LDA #$01
+    STA PPUDATA
+
+    LDA #3
+    STA PPUDATA
+    LDA #$0E
+    STA PPUDATA
+    LDA #$2D
+    STA PPUDATA
+    LDA #$26
+    STA PPUDATA
+
+
 
     ;Write sprite data for sprite 0
     LDA #120    ;Y pos
@@ -90,6 +108,16 @@ vblankwait2:
     STA $0202
     LDA #128    ;X pos
     STA $0203
+
+    ;Write sprite data for sprite 1
+    LDA #60    ;Y pos
+    STA $0204
+    LDA #1      ;Tile number
+    STA $0205
+    LDA #1      ;Attribute
+    STA $0206
+    LDA #190    ;X pos
+    STA $0207
 
     LDA #%10000000 ;Enamble NMI
     STA PPUCTRL
@@ -114,10 +142,10 @@ NMI:
     STA $0203
 
 ;Increment y pos of sprite
-    LDA $0200
-    CLC
-    ADC #1
-    STA $0200
+    ; LDA $0200
+    ; CLC
+    ; ADC #1
+    ; STA $0200
 
 
 ;Tell OAM where the sprites will be stored
@@ -138,3 +166,4 @@ NMI:
     .bank 2
     .org $0000
     ;Graphics here
+    .incbin "payday.chr"
