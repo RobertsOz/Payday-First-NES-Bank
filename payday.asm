@@ -27,10 +27,12 @@ BUTTON_LEFT     = %00000010
 BUTTON_RIGHT    = %00000001
     .rsset $0010
 joypad1_state       .rs 1
+bullet_active       .rs 1
 
     .rsset $0200
 sprite_player       .rs 4
-gun                 .rs 4
+sprite_gun          .rs 4
+sprite_bullet       .rs 4
 
     .rsset $0000
 SPRITE_Y            .rs 1
@@ -118,7 +120,7 @@ vblankwait2:
     STA PPUDATA
     LDA #$2D
     STA PPUDATA
-    LDA #$26
+    LDA #$27
     STA PPUDATA
 
 
@@ -135,13 +137,13 @@ vblankwait2:
 
     ;Write sprite data for sprite 1
     LDA #60    ;Y pos
-    STA gun + SPRITE_Y
+    STA sprite_gun + SPRITE_Y
     LDA #1      ;Tile number
-    STA gun + SPRITE_TILE
+    STA sprite_gun + SPRITE_TILE
     LDA #1      ;Attribute
-    STA gun + SPRITE_ATTRIB
+    STA sprite_gun + SPRITE_ATTRIB
     LDA #190    ;X pos
-    STA gun + SPRITE_X
+    STA sprite_gun + SPRITE_X
 
     LDA #%10000000 ;Enamble NMI
     STA PPUCTRL
@@ -175,6 +177,7 @@ ReadController:
     INX
     CPX #8 ;Compare if X is 8
     BNE ReadController
+
 
 ;React to RIGHT button
     LDA joypad1_state
@@ -220,6 +223,38 @@ ReadUP_Done: ;end if
     STA sprite_player + SPRITE_Y
 ReadDOWN_Done: ;end if
 
+;React to A button
+    LDA joypad1_state
+    AND #BUTTON_A
+    BEQ ReadA_Done ;if recieve input do this, else jump to ReadA_Done
+    ; Spawn a bullet if one is not active
+    LDA bullet_active
+    BNE ReadA_Done
+    ; No bullet active, spawn one
+    LDA #1
+    STA bullet_active
+    LDA sprite_player + SPRITE_Y    ;Y pos
+    STA sprite_bullet + SPRITE_Y
+    LDA #2                          ;Tile number
+    STA sprite_bullet + SPRITE_TILE
+    LDA #1                          ;Attribute
+    STA sprite_bullet + SPRITE_ATTRIB
+    LDA sprite_player + SPRITE_X    ;X pos
+    STA sprite_bullet + SPRITE_X
+ReadA_Done: ;end if
+
+;Update bullet
+    LDA bullet_active
+    BEQ UpdateBullet_Done
+    LDA sprite_bullet + SPRITE_X
+    SEC
+    SBC #1
+    STA sprite_bullet + SPRITE_X
+    BCS UpdateBullet_Done
+    ; If carry flag is clear, bullet has left the screen -- destroy it
+    LDA #0
+    STA bullet_active
+UpdateBullet_Done:
 
 
 
