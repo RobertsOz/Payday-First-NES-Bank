@@ -66,6 +66,8 @@ vblankwait2:
     BPL vblankwait2
 
     ; End of Init
+    
+    
     ; Reset the PPU high/low latch
     LDA PPUSTATUS
     ; Write adress 3f10 to the PPU
@@ -79,6 +81,23 @@ vblankwait2:
     STA PPUDATA
 
 
+    ;Write sprite data for sprite 0
+    LDA #120    ;Y pos
+    STA $0200
+    LDA #0      ;Tile number
+    STA $0201
+    LDA #0      ;Attribute
+    STA $0202
+    LDA #128    ;X pos
+    STA $0203
+
+    LDA #%10000000 ;Enamble NMI
+    STA PPUCTRL
+
+    LDA #%00010000 ;Enable Sprites
+    STA PPUMASK
+
+
 
 ;Infinite loop
 forever:
@@ -88,6 +107,25 @@ forever:
 
 ; NMI called every frame
 NMI:
+;Increment x pos of sprite
+    LDA $0203
+    CLC
+    ADC #1
+    STA $0203
+
+;Increment y pos of sprite
+    LDA $0200
+    CLC
+    ADC #1
+    STA $0200
+
+
+;Tell OAM where the sprites will be stored
+    LDA #0
+    STA OAMADDR
+    LDA #$02
+    STA OAMDMA
+
     RTI  ;Return from interrupt
 
 ;----------------
