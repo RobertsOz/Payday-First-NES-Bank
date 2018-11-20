@@ -14,6 +14,8 @@ PPUSCROLL = $2005
 PPUADDR   = $2006
 PPUDATA   = $2007
 OAMDMA    = $4014
+JOYPAD1   = $4016
+JOYPAD2   = $4017
 
     .bank 0
     .org $C000
@@ -80,7 +82,7 @@ vblankwait2:
     LDA #3
     STA PPUDATA
 
-    ; Write the pallet color
+    ; Write the pallet color sprite 0
     LDA #$15
     STA PPUDATA
     LDA #$20
@@ -88,6 +90,7 @@ vblankwait2:
     LDA #$01
     STA PPUDATA
 
+    ; Write pallet color sprite 1
     LDA #3
     STA PPUDATA
     LDA #$0E
@@ -135,20 +138,37 @@ forever:
 
 ; NMI called every frame
 NMI:
-;Increment x pos of sprite
+;Init first controller
+    LDA #1
+    STA JOYPAD1
+    LDA #0
+    STA JOYPAD1
+;Read A button
+    LDA JOYPAD1
+    AND #%00000001
+    BEQ ReadA_Done ;if recieve input do this, else jump to ReadA_Done
+    ;Increment x pos of sprite
     LDA $0203
     CLC
     ADC #1
     STA $0203
+ReadA_Done: ;end if
 
-;Increment y pos of sprite
-    ; LDA $0200
-    ; CLC
-    ; ADC #1
-    ; STA $0200
+;Read B button
+    LDA JOYPAD1
+    AND #%00000001
+    BEQ ReadB_Done ;if recieve input do this, else jump to ReadA_Done
+    ;Increment x pos of sprite
+    LDA $0203
+    CLC
+    ADC #-1
+    STA $0203
+ReadB_Done: ;end if
 
 
-;Tell OAM where the sprites will be stored
+
+
+;Copy sprite data to the PPU
     LDA #0
     STA OAMADDR
     LDA #$02
