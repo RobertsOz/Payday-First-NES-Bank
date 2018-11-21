@@ -115,7 +115,22 @@ vblankwait2:
 
     ; End of Init
     
-    
+    JSR Initialise_Game
+
+    LDA #%10000000 ;Enamble NMI
+    STA PPUCTRL
+
+    LDA #%00010000 ;Enable Sprites
+    STA PPUMASK
+
+
+
+;Infinite loop
+forever:
+    JMP forever
+
+;--------------------
+Initialise_Game: ;Start subroutine
     ; Reset the PPU high/low latch
     LDA PPUSTATUS
     ; Write adress 3f10 to the PPU
@@ -205,21 +220,8 @@ InitEnemies_LoopX:
     STA temp_y
     BNE InitEnemies_LoopY
 
-
-    LDA #%10000000 ;Enamble NMI
-    STA PPUCTRL
-
-    LDA #%00010000 ;Enable Sprites
-    STA PPUMASK
-
-
-
-;Infinite loop
-forever:
-    JMP forever
-
+    RTS ;End subroutine
 ;--------------------
-
 ; NMI called every frame
 NMI:
 ;Init first controller
@@ -387,7 +389,8 @@ UpdateEnemies_NoCollision:
     ; Check collision with player
     CheckCollisionWithEnemy sprite_player+SPRITE_X, sprite_player+SPRITE_Y, #8, #8, UpdateEnemies_NoCollisionWithPlayer
     ;Handle Collision
-    NOP
+    JSR Initialise_Game
+    JMP UpdateEnemies_End
 UpdateEnemies_NoCollisionWithPlayer:
 UpdateEnemies_Next:
     DEX
