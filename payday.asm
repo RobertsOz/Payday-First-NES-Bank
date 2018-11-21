@@ -26,23 +26,14 @@ BUTTON_DOWN     = %00000100
 BUTTON_LEFT     = %00000010
 BUTTON_RIGHT    = %00000001
 
-ENEMY_SQUAD_WIDTH   = 6
-ENEMY_SQUAD_HEIGHT  = 4
-NUM_ENEMIES         = ENEMY_SQUAD_WIDTH * ENEMY_SQUAD_HEIGHT
-ENEMY_SPACING       = 16
-ENEMY_DESCENT_SPEED = 4
-
-ENEMY_HITBOX_WIDTH  = 8
-ENEMY_HITBOX_HEIGHT  = 8
-BULLET_HITBOX_WIDTH  = 2
-BULLET_HITBOX_HEIGHT  = 1
 
     .rsset $0000
 joypad1_state       .rs 1
 bullet_active       .rs 1
-temp_x              .rs 1
-temp_y              .rs 1
-enemy_info          .rs 4 * NUM_ENEMIES
+nametable_adress    .rs 2
+scroll_x            .rs 1
+scroll_page         .rs 1
+
 
 
 
@@ -50,17 +41,12 @@ enemy_info          .rs 4 * NUM_ENEMIES
 sprite_player       .rs 4
 sprite_gun          .rs 4
 sprite_bullet       .rs 4
-sprite_enemy        .rs 4 * NUM_ENEMIES
 
     .rsset $0000
 SPRITE_Y            .rs 1
 SPRITE_TILE         .rs 1
 SPRITE_ATTRIB       .rs 1
 SPRITE_X            .rs 1
-
-    .rsset $0000
-ENEMY_SPEED         .rs 1
-ENEMY_ALIVE         .rs 1
 
 
     .bank 0
@@ -120,9 +106,12 @@ vblankwait2:
     LDA #%10000000 ;Enamble NMI
     STA PPUCTRL
 
-    LDA #%00010000 ;Enable Sprites
+    LDA #%00011000 ;Enable Sprites and Background
     STA PPUMASK
 
+    LDA #0
+    STA PPUSCROLL ;Set x scroll
+    Sta PPUSCROLL ;Set y scroll
 
 
 ;Infinite loop
@@ -133,7 +122,34 @@ forever:
 Initialise_Game: ;Start subroutine
     ; Reset the PPU high/low latch
     LDA PPUSTATUS
-    ; Write adress 3f10 to the PPU
+
+    ; Write adress 3f00 to the PPU (Background pallet)
+    LDA #$3F
+    STA PPUADDR
+    LDA #$00
+    STA PPUADDR
+
+    ; Write the bg color pallet 1
+    LDA #$10
+    STA PPUDATA
+    LDA #$19
+    STA PPUDATA
+    LDA #$29
+    STA PPUDATA
+    LDA #$09
+    STA PPUDATA
+
+    ; Write the bg color pallet 2
+    LDA #$10
+    STA PPUDATA
+    LDA #$15
+    STA PPUDATA
+    LDA #$25
+    STA PPUDATA
+    LDA #$05
+    STA PPUDATA
+
+    ; Write adress 3f10 to the PPU (Sprite pallet)
     LDA #$3F
     STA PPUADDR
     LDA #$10
@@ -183,44 +199,116 @@ Initialise_Game: ;Start subroutine
     LDA #190    ;X pos
     STA sprite_gun + SPRITE_X
 
-    ; Init enemies
+    ;Load nametable data 1
+    LDA #$20           ;Write adress $2000 to PPuADDR register
+    STA PPUADDR
+    LDA #$00
+    STA PPUADDR
 
-    LDX #0
-    LDA #ENEMY_SQUAD_HEIGHT * ENEMY_SPACING
-    STA temp_y
-InitEnemies_LoopY:
-    LDA #ENEMY_SQUAD_WIDTH * ENEMY_SPACING
-    STA temp_x
-InitEnemies_LoopX:
-    ;Accumulator = temp_x here
-    STA sprite_enemy + SPRITE_X, x
-    LDA temp_y
-    STA sprite_enemy+SPRITE_Y, x
-    LDA #0
-    STA sprite_enemy+SPRITE_TILE, x
-    LDA #1
-    STA sprite_enemy+SPRITE_ATTRIB, x
-    STA enemy_info+ENEMY_SPEED,x
-    STA enemy_info+ENEMY_ALIVE,x
-    ; Increment X register by 4
-    TXA
-    CLC
-    ADC #4
-    TAX
-    ;loop check for x value
-    LDA temp_x
-    SEC
-    SBC #ENEMY_SPACING
-    STA temp_x
-    BNE InitEnemies_LoopX
-    ;loop check for y value
-    LDA temp_y
-    SEC
-    SBC #ENEMY_SPACING
-    STA temp_y
-    BNE InitEnemies_LoopY
+    
+    LDA #LOW(NametableData)
+    STA nametable_adress
+    LDA #HIGH(NametableData)
+    STA nametable_adress+1
+LoadNametable_OuterLoop:
+    LDY #0
+LoadNametable_InnerLoop:
+    LDA [nametable_adress], y
+    BEQ LoadNametable_End
+    STA PPUDATA
+    INY
+    BNE LoadNametable_InnerLoop
+    INC nametable_adress+1
+    JMP LoadNametable_OuterLoop
+LoadNametable_End:
+
+    ;Load attribute data
+    LDA #$23           ;Write adress $23C0 to PPuADDR register
+    STA PPUADDR
+    LDA #$C0
+    STA PPUADDR
+
+    LDA #%01010101
+    LDX #64
+LoadAttributes_Loop:
+    STA PPUDATA
+    DEX
+    BNE LoadAttributes_Loop
+
+    ;Load nametable data 2
+    LDA #$24           ;Write adress $2400 to PPuADDR register
+    STA PPUADDR
+    LDA #$00
+    STA PPUADDR
+
+    
+    LDA #LOW(NametableData)
+    STA nametable_adress
+    LDA #HIGH(NametableData)
+    STA nametable_adress+1
+LoadNametable2_OuterLoop:
+    LDY #0
+LoadNametable2_InnerLoop:
+    LDA [nametable_adress], y
+    BEQ LoadNametable2_End
+    STA PPUDATA
+    INY
+    BNE LoadNametable2_InnerLoop
+    INC nametable_adress+1
+    JMP LoadNametable2_OuterLoop
+LoadNametable2_End:
+
+    ;Load attribute data 2
+    LDA #$27           ;Write adress $27C0 to PPuADDR register
+    STA PPUADDR
+    LDA #$C0
+    STA PPUADDR
+
+    LDA #%00000000
+    LDX #64
+LoadAttributes2_Loop:
+    STA PPUDATA
+    DEX
+    BNE LoadAttributes2_Loop
+
+
+
 
     RTS ;End subroutine
+;--------------------
+NametableData:
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $10, $11, $12, $13, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $20, $21, $22, $23, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $10, $11, $12, $13, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $20, $21, $22, $23, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $10, $11, $12, $13, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $10, $11, $12, $13, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $20, $21, $22, $23, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $20, $21, $22, $23, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
+    .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03
+    .db $00 ;null terminator
+
 ;--------------------
 ; NMI called every frame
 NMI:
@@ -319,87 +407,24 @@ ReadA_Done: ;end if
     STA bullet_active
 UpdateBullet_Done:
 
-;Update enemies
-    LDX #(NUM_ENEMIES-1)*4
-UpdateEnemies_Loop:
-    ; Check if enemy is alive
-    LDA enemy_info+ENEMY_ALIVE, x
-    BNE UpdateEnemies_Start
-    JMP UpdateEnemies_Next
-UpdateEnemies_Start:
-    LDA sprite_enemy+SPRITE_X, x
+    
+    ;Scroll
+    LDA scroll_x
     CLC
-    ADC enemy_info+ENEMY_SPEED,x
-    STA sprite_enemy+SPRITE_X, x
-    CMP #256 - ENEMY_SPACING
-    BCS UpdateEnemies_Reverse
-    CMP #ENEMY_SPACING
-    BCC UpdateEnemies_Reverse
-    JMP UpdateEnemies_NoReverse
-UpdateEnemies_Reverse:
-    ;Reverse direction and descend
+    ADC #1
+    STA scroll_x
+    STA PPUSCROLL
+    BCC Scroll_NoWrap
+    ; scroll_x has wrapped, so switch, scroll_page
+    LDA scroll_page
+    EOR #1
+    STA scroll_page
+    ORA #%10000000
+    STA PPUCTRL
+Scroll_NoWrap:
     LDA #0
-    SEC
-    SBC enemy_info+ENEMY_SPEED,x
-    STA enemy_info+ENEMY_SPEED,x
-    LDA sprite_enemy+SPRITE_Y, x
-    CLC
-    ADC #ENEMY_DESCENT_SPEED
-    STA sprite_enemy+SPRITE_Y, x
-    LDA sprite_enemy+SPRITE_ATTRIB, x
-    EOR #%01000000
-    STA sprite_enemy+SPRITE_ATTRIB, x
-UpdateEnemies_NoReverse:       ;             \1        \2        \3            \4             \5
-CheckCollisionWithEnemy .macro ; parameters: object_x, object_y, object_hit_w, object_hit_h , no_collision_label
-    ; If there is a collision, execution continues immediately after this macro
-    ; Else, jump to no_collision_label
-    ;Check collision with bullet
-    LDA sprite_enemy+SPRITE_X, x    ;Calculate x_enemy - width_bullet - 1 (x1-w2-1)
-    SEC 
-    SBC \3+1                         
-    CMP \1                          ;Compare with x_bullet(x2)
-    BCS \5                          ;Branch if x1-w2 >= x2
-    CLC
-    ADC \3+1+ENEMY_HITBOX_WIDTH     ;Calculate x_enemy + w_enemy(x1+w1),assume w1 =8
-    CMP \1                          ;Compare with x_bullet(x2)
-    BCC \5                          ;Branching if x1+w1 < x2
+    STA PPUSCROLL
 
-    LDA sprite_enemy+SPRITE_Y, x    ;Calculate y_enemy - width_bullet(y1-h2)
-    SEC 
-    SBC \4+1                           
-    CMP \2                          ;Compare with y_bullet(y2)
-    BCS \5                          ;Branch if y1-h2 >= y2
-    CLC
-    ADC \4+1+ENEMY_HITBOX_HEIGHT    ;Calculate y_enemy + h_enemy(y1+h1),assume h1 =8
-    CMP \2                          ;Compare with y_bullet(y2)
-    BCC \5                          ;Branching if y1+h1 < y2
-
-    .endm
-
-    ;Check collision with bullet
-    CheckCollisionWithEnemy sprite_bullet+SPRITE_X, sprite_bullet+SPRITE_Y, #BULLET_HITBOX_WIDTH, #BULLET_HITBOX_HEIGHT, UpdateEnemies_NoCollision
-    ;Handle Collision
-    LDA #0                          ;Destroy Bullet and Enemy
-    STA bullet_active
-    STA enemy_info+ENEMY_ALIVE,x   
-    LDA #$FF
-    STA sprite_bullet+SPRITE_Y
-    STA sprite_enemy+SPRITE_Y,x 
-UpdateEnemies_NoCollision:
-    ; Check collision with player
-    CheckCollisionWithEnemy sprite_player+SPRITE_X, sprite_player+SPRITE_Y, #8, #8, UpdateEnemies_NoCollisionWithPlayer
-    ;Handle Collision
-    JSR Initialise_Game
-    JMP UpdateEnemies_End
-UpdateEnemies_NoCollisionWithPlayer:
-UpdateEnemies_Next:
-    DEX
-    DEX
-    DEX
-    DEX
-    BMI UpdateEnemies_End
-    JMP UpdateEnemies_Loop
-UpdateEnemies_End:
 
 
 ;Copy sprite data to the PPU
