@@ -37,6 +37,9 @@ scroll_page         .rs 1
 generate_x          .rs 1
 generate_counter    .rs 1
 generate_pipe_y     .rs 1
+player_speed        .rs 2   ;in subpixels/frame --16bits
+player_position_sub .rs 1   ; in subpixels
+
 
 
 
@@ -56,6 +59,10 @@ PIPE_DISTANCE           = 12
 PIPE_GAP                = 6
 PIPE_RANDOM_MASK        = 15
 PIPE_DISTANCE_FROM_TOP  = 5 
+
+GRAVITY                 = 10 ;in subpixels/frame^2
+FLAP_SPEED              = -(2 *256);in subpixels/frame
+SCREEN_BOTTOM_Y         = 224
     .bank 0
     .org $C000
 
@@ -497,83 +504,130 @@ ReadController:
     BNE ReadController
 
 
-;React to RIGHT button
-    LDA joypad1_state
-    AND #BUTTON_RIGHT
-    BEQ ReadRIGHT_Done ;if recieve input do this, else jump to ReadA_Done
-    ;Increment x pos of sprite
-    LDA sprite_player + SPRITE_X
-    CLC
-    ADC #1
-    STA sprite_player + SPRITE_X
-ReadRIGHT_Done: ;end if
+; ;React to RIGHT button
+;     LDA joypad1_state
+;     AND #BUTTON_RIGHT
+;     BEQ ReadRIGHT_Done ;if recieve input do this, else jump to ReadA_Done
+;     ;Increment x pos of sprite
+;     LDA sprite_player + SPRITE_X
+;     CLC
+;     ADC #1
+;     STA sprite_player + SPRITE_X
+; ReadRIGHT_Done: ;end if
 
-;React to LEFT button
-    LDA joypad1_state
-    AND #BUTTON_LEFT
-    BEQ ReadLEFT_Done ;if recieve input do this, else jump to ReadA_Done
-    ;Decrement x pos of sprite
-    LDA sprite_player + SPRITE_X
-    SEC
-    SBC #1
-    STA sprite_player + SPRITE_X
-ReadLEFT_Done: ;end if
+; ;React to LEFT button
+;     LDA joypad1_state
+;     AND #BUTTON_LEFT
+;     BEQ ReadLEFT_Done ;if recieve input do this, else jump to ReadA_Done
+;     ;Decrement x pos of sprite
+;     LDA sprite_player + SPRITE_X
+;     SEC
+;     SBC #1
+;     STA sprite_player + SPRITE_X
+; ReadLEFT_Done: ;end if
 
-;React to UP button
-    LDA joypad1_state
-    AND #BUTTON_UP
-    BEQ ReadUP_Done ;if recieve input do this, else jump to ReadA_Done
-    ;Decrement Y pos of sprite
-    LDA sprite_player + SPRITE_Y
-    SEC
-    SBC #1
-    STA sprite_player + SPRITE_Y
-ReadUP_Done: ;end if
+; ;React to UP button
+;     LDA joypad1_state
+;     AND #BUTTON_UP
+;     BEQ ReadUP_Done ;if recieve input do this, else jump to ReadA_Done
+;     ;Decrement Y pos of sprite
+;     LDA sprite_player + SPRITE_Y
+;     SEC
+;     SBC #1
+;     STA sprite_player + SPRITE_Y
+; ReadUP_Done: ;end if
 
-;React to DOWN button
-    LDA joypad1_state
-    AND #BUTTON_DOWN
-    BEQ ReadDOWN_Done ;if recieve input do this, else jump to ReadA_Done
-    ;Increment Y pos of sprite
-    LDA sprite_player + SPRITE_Y
-    CLC
-    ADC #1
-    STA sprite_player + SPRITE_Y
-ReadDOWN_Done: ;end if
+; ;React to DOWN button
+;     LDA joypad1_state
+;     AND #BUTTON_DOWN
+;     BEQ ReadDOWN_Done ;if recieve input do this, else jump to ReadA_Done
+;     ;Increment Y pos of sprite
+;     LDA sprite_player + SPRITE_Y
+;     CLC
+;     ADC #1
+;     STA sprite_player + SPRITE_Y
+; ReadDOWN_Done: ;end if
 
-;React to A button
+; ;React to A button
+;     LDA joypad1_state
+;     AND #BUTTON_A
+;     BEQ ReadA_Done ;if recieve input do this, else jump to ReadA_Done
+;     ; Spawn a bullet if one is not active
+;     LDA bullet_active
+;     BNE ReadA_Done
+;     ; No bullet active, spawn one
+;     LDA #1
+;     STA bullet_active
+;     LDA sprite_player + SPRITE_Y    ;Y pos
+;     STA sprite_bullet + SPRITE_Y
+;     LDA #2                          ;Tile number
+;     STA sprite_bullet + SPRITE_TILE
+;     LDA #1                          ;Attribute
+;     STA sprite_bullet + SPRITE_ATTRIB
+;     LDA sprite_player + SPRITE_X    ;X pos
+;     STA sprite_bullet + SPRITE_X
+; ReadA_Done: ;end if
+
+; ;Update bullet
+;     LDA bullet_active
+;     BEQ UpdateBullet_Done
+;     LDA sprite_bullet + SPRITE_X
+;     SEC
+;     SBC #1
+;     STA sprite_bullet + SPRITE_X
+;     BCS UpdateBullet_Done
+;     ; If carry flag is clear, bullet has left the screen -- destroy it
+;     LDA #0
+;     STA bullet_active
+; UpdateBullet_Done:
+;-----------FLAPPY BIRD CONTROLS
+    ;React to A button
     LDA joypad1_state
     AND #BUTTON_A
     BEQ ReadA_Done ;if recieve input do this, else jump to ReadA_Done
-    ; Spawn a bullet if one is not active
-    LDA bullet_active
-    BNE ReadA_Done
-    ; No bullet active, spawn one
-    LDA #1
-    STA bullet_active
-    LDA sprite_player + SPRITE_Y    ;Y pos
-    STA sprite_bullet + SPRITE_Y
-    LDA #2                          ;Tile number
-    STA sprite_bullet + SPRITE_TILE
-    LDA #1                          ;Attribute
-    STA sprite_bullet + SPRITE_ATTRIB
-    LDA sprite_player + SPRITE_X    ;X pos
-    STA sprite_bullet + SPRITE_X
+    ; Set player speed
+    LDA #LOW(FLAP_SPEED)
+    STA player_speed
+    LDA #HIGH(FLAP_SPEED)
+    STA player_speed+1
 ReadA_Done: ;end if
 
-;Update bullet
-    LDA bullet_active
-    BEQ UpdateBullet_Done
-    LDA sprite_bullet + SPRITE_X
-    SEC
-    SBC #1
-    STA sprite_bullet + SPRITE_X
-    BCS UpdateBullet_Done
-    ; If carry flag is clear, bullet has left the screen -- destroy it
-    LDA #0
-    STA bullet_active
-UpdateBullet_Done:
+    ;Update player sprite
+    ;First, update speed
+    LDA player_speed    ;Low 8 bits
+    CLC
+    ADC #LOW(GRAVITY)
+    STA player_speed
+    LDA player_speed+1  ;High 8 bits
+    ADC #HIGH(GRAVITY)  ;Dont clear carry flag
+    STA player_speed+1
 
+    ;Seconds, update position
+    LDA player_position_sub ;Low 8 bits
+    CLC
+    ADC player_speed
+    STA player_position_sub
+    LDA sprite_player+SPRITE_Y  ;High 8 bits
+    ADC player_speed+1          ;Dont clear carry flag
+    STA sprite_player+SPRITE_Y
+
+    ;Check for top or bottom of screen
+    CMP #SCREEN_BOTTOM_Y    ;Accumulator already contains player y
+    BCC UpdatePlayer_NoClamp
+    ;Check sign of speed
+    LDA player_speed+1
+    BMI UpdatePlayer_ClampToTop
+    LDA #SCREEN_BOTTOM_Y-1      ;Clamp to bottom
+    JMP UpdatePlayer_DoClamp
+UpdatePlayer_ClampToTop:
+    LDA #0                      ;Clamp to top
+UpdatePlayer_DoClamp:
+    STA sprite_player+SPRITE_Y
+    LDA #0              ;Set player speed to zero
+    STA player_speed    ;Both bytes
+    STA player_speed+1
+UpdatePlayer_NoClamp:
+;-----------
     
 
 ;Copy sprite data to the PPU
