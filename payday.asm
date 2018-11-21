@@ -28,11 +28,15 @@ BUTTON_RIGHT    = %00000001
 
 
     .rsset $0000
+seed                .rs 2
 joypad1_state       .rs 1
 bullet_active       .rs 1
 nametable_adress    .rs 2
 scroll_x            .rs 1
 scroll_page         .rs 1
+generate_x          .rs 1
+generate_counter    .rs 1
+generate_pipe_y     .rs 1
 
 
 
@@ -48,7 +52,10 @@ SPRITE_TILE         .rs 1
 SPRITE_ATTRIB       .rs 1
 SPRITE_X            .rs 1
 
-
+PIPE_DISTANCE           = 12
+PIPE_GAP                = 6
+PIPE_RANDOM_MASK        = 15
+PIPE_DISTANCE_FROM_TOP  = 5 
     .bank 0
     .org $C000
 
@@ -120,6 +127,12 @@ forever:
 
 ;--------------------
 Initialise_Game: ;Start subroutine
+
+    ; Seed the random number generator
+    LDA #$12
+    STA seed
+    LDA #$34
+    STA seed+1
     ; Reset the PPU high/low latch
     LDA PPUSTATUS
 
@@ -182,7 +195,7 @@ Initialise_Game: ;Start subroutine
     ;Write sprite data for sprite 0
     LDA #120    ;Y pos
     STA sprite_player + SPRITE_Y
-    LDA #0      ;Tile number
+    LDA #4      ;Tile number
     STA sprite_player + SPRITE_TILE
     LDA #0      ;Attribute
     STA sprite_player + SPRITE_ATTRIB
@@ -200,27 +213,38 @@ Initialise_Game: ;Start subroutine
     STA sprite_gun + SPRITE_X
 
     ;Load nametable data 1
-    LDA #$20           ;Write adress $2000 to PPuADDR register
-    STA PPUADDR
-    LDA #$00
-    STA PPUADDR
+
+;     LDA #$20           ;Write adress $2000 to PPuADDR register
+;     STA PPUADDR
+;     LDA #$00
+;     STA PPUADDR
 
     
-    LDA #LOW(NametableData)
-    STA nametable_adress
-    LDA #HIGH(NametableData)
-    STA nametable_adress+1
-LoadNametable_OuterLoop:
-    LDY #0
-LoadNametable_InnerLoop:
-    LDA [nametable_adress], y
-    BEQ LoadNametable_End
-    STA PPUDATA
-    INY
-    BNE LoadNametable_InnerLoop
-    INC nametable_adress+1
-    JMP LoadNametable_OuterLoop
-LoadNametable_End:
+;     LDA #LOW(NametableData)
+;     STA nametable_adress
+;     LDA #HIGH(NametableData)
+;     STA nametable_adress+1
+; LoadNametable_OuterLoop:
+;     LDY #0
+; LoadNametable_InnerLoop:
+;     LDA [nametable_adress], y
+;     BEQ LoadNametable_End
+;     STA PPUDATA
+;     INY
+;     BNE LoadNametable_InnerLoop
+;     INC nametable_adress+1
+;     JMP LoadNametable_OuterLoop
+; LoadNametable_End:
+
+    
+
+    ;Generate initial level
+
+InitialGeneration_Loop:
+    JSR GenerateColumn
+    LDA generate_x
+    CMP #36
+    BCC InitialGeneration_Loop
 
     ;Load attribute data
     LDA #$23           ;Write adress $23C0 to PPuADDR register
@@ -228,35 +252,12 @@ LoadNametable_End:
     LDA #$C0
     STA PPUADDR
 
-    LDA #%01010101
+    LDA #%00000000
     LDX #64
 LoadAttributes_Loop:
     STA PPUDATA
     DEX
     BNE LoadAttributes_Loop
-
-    ;Load nametable data 2
-    LDA #$24           ;Write adress $2400 to PPuADDR register
-    STA PPUADDR
-    LDA #$00
-    STA PPUADDR
-
-    
-    LDA #LOW(NametableData)
-    STA nametable_adress
-    LDA #HIGH(NametableData)
-    STA nametable_adress+1
-LoadNametable2_OuterLoop:
-    LDY #0
-LoadNametable2_InnerLoop:
-    LDA [nametable_adress], y
-    BEQ LoadNametable2_End
-    STA PPUDATA
-    INY
-    BNE LoadNametable2_InnerLoop
-    INC nametable_adress+1
-    JMP LoadNametable2_OuterLoop
-LoadNametable2_End:
 
     ;Load attribute data 2
     LDA #$27           ;Write adress $27C0 to PPuADDR register
@@ -264,7 +265,7 @@ LoadNametable2_End:
     LDA #$C0
     STA PPUADDR
 
-    LDA #%00000000
+    LDA #00000000
     LDX #64
 LoadAttributes2_Loop:
     STA PPUDATA
@@ -276,6 +277,148 @@ LoadAttributes2_Loop:
 
     RTS ;End subroutine
 ;--------------------
+
+; prng
+;
+; Returns a random 8-bit number in A (0-255), clobbers X (0).
+;
+; Requires a 2-byte value on the zero page called "seed".
+; Initialize seed to any value except 0 before the first call to prng.
+; (A seed value of 0 will cause prng to always return 0.)
+;
+; This is a 16-bit Galois linear feedback shift register with polynomial $002D.
+; The sequence of numbers it generates will repeat after 65535 calls.
+;
+; Execution time is an average of 125 cycles (excluding jsr and rts)
+
+prng:
+	LDX #8     ; iteration count (generates 8 bits)
+	LDA seed+0
+prng_1:
+	ASL A       ; shift the register
+	ROL seed+1
+	BCC prng_2
+	EOR #$2D   ; apply XOR feedback whenever a 1 bit is shifted out
+prng_2:
+	DEX
+	BNE prng_1
+	STA seed+0
+	CMP #0     ; reload flags
+	RTS
+;--------------------
+
+GenerateColumn:
+    ; Put PPU into ad 32 mode
+    LDA #%00000100
+    STA PPUCTRL
+
+    ; Find most significant byte of PPU adress
+    LDA generate_x
+    AND #32             ;Accumulator = 0 for nametable $2000, 32 for name table $2400
+    LSR A               ;Divide by 8 to get accumulator = 0 or 5
+    LSR A
+    LSR A               ;This clears the carry flag
+    ADC #$20            ;Accumulator now = $20 or $24
+    STA PPUADDR
+
+    ; Find the leas significant byte of the PPU adress
+    LDA generate_x
+    AND #31
+    STA PPUADDR
+
+    ; Write the data
+    LDA generate_counter
+    BNE GenerateColumn_ExistingPipe
+    ; Set up new pipes
+    JSR prng
+    AND #PIPE_RANDOM_MASK
+    CLC
+    ADC #PIPE_DISTANCE_FROM_TOP
+    STA generate_pipe_y
+    LDA generate_counter
+GenerateColumn_ExistingPipe:
+    ; If generate_counter >= 4, generate empty column
+    CMP #4
+    BCS GenerateColumn_Empty
+    ; Else, generate pipes
+    ; Body of top pipe -- lenght is generate_pipe_y - 2
+    LDX generate_pipe_y
+    DEX
+    DEX
+    AND #$03
+    ORA #$30        ;Use tile 30, 31,32,33 depending on gen counter
+.Loop_1:
+    STA PPUDATA
+    DEX
+    BNE .Loop_1
+
+    ; Rim of top pipe
+    AND #$03
+    ORA #$10        ;Use tile 10, 11,12,13
+    STA PPUDATA
+    AND #$03
+    ORA #$20        ;Use tile 20, 21,22,23
+    STA PPUDATA
+
+    ; Empty space between pipes
+    LDX #PIPE_GAP
+    LDY #$00
+.Loop_2:
+    STY PPUDATA
+    DEX
+    BNE .Loop_2
+
+    ; Rim of bottom pipe
+    AND #$03
+    ORA #$10        ;Use tile 10, 11,12,13
+    STA PPUDATA
+    AND #$03
+    ORA #$20        ;Use tile 20, 21,22,23
+    STA PPUDATA
+
+    ; Body of bottom pipe -- lenght is 30 - 2 - PIPE_GAP - generate_pipe_y 
+    AND #$03
+    ORA #$30        ;Use tile 30, 31,32,33 depending on gen counter
+    TAY             ;Store tile number in Y register so we can use the accumulator
+    LDA #30 - 2 - PIPE_GAP
+    SEC
+    SBC generate_pipe_y
+    TAX
+.Loop_3:
+    STY PPUDATA
+    DEX
+    BNE .Loop_3
+    JMP GenerateColumn_End
+
+GenerateColumn_Empty:
+    LDX #30         ; 30 rows
+    LDA #$00        ; Tile 0
+GenerateColumn_Empty_Loop:
+    STA PPUDATA
+    DEX
+    BNE GenerateColumn_Empty_Loop
+
+GenerateColumn_End:
+    ; Increment generate_x
+    LDA generate_x
+    CLC
+    ADC #1
+    AND #63         ; Wrap back to zero 64
+    STA generate_x
+
+    ; Increment generate_counter
+    LDA generate_counter
+    CLC
+    ADC #1
+    CMP #PIPE_DISTANCE
+    BCC GenerateColumn_NocounterWrap
+    LDA #0
+GenerateColumn_NocounterWrap:
+    STA generate_counter
+
+
+    RTS
+
 NametableData:
     .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
     .db $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03, $03, $03, $30, $31, $32, $33, $03, $03, $03, $03, $03, $03, $03, $03 
@@ -312,6 +455,30 @@ NametableData:
 ;--------------------
 ; NMI called every frame
 NMI:
+;Scroll
+    LDA scroll_x
+    CLC
+    ADC #1
+    STA scroll_x
+    STA PPUSCROLL
+    BCC Scroll_NoWrap
+    ; scroll_x has wrapped, so switch, scroll_page
+    LDA scroll_page
+    EOR #1
+    STA scroll_page
+Scroll_NoWrap:
+    LDA #0
+    STA PPUSCROLL
+
+    ; Check if a column of bg needs to be generated
+    LDA scroll_x
+    AND #7
+    BNE Scroll_NoGenerate
+    JSR GenerateColumn
+Scroll_NoGenerate:
+
+
+
 ;Init first controller
     LDA #1
     STA JOYPAD1
@@ -408,30 +575,16 @@ ReadA_Done: ;end if
 UpdateBullet_Done:
 
     
-    ;Scroll
-    LDA scroll_x
-    CLC
-    ADC #1
-    STA scroll_x
-    STA PPUSCROLL
-    BCC Scroll_NoWrap
-    ; scroll_x has wrapped, so switch, scroll_page
-    LDA scroll_page
-    EOR #1
-    STA scroll_page
-    ORA #%10000000
-    STA PPUCTRL
-Scroll_NoWrap:
-    LDA #0
-    STA PPUSCROLL
-
-
 
 ;Copy sprite data to the PPU
     LDA #0
     STA OAMADDR
     LDA #$02
     STA OAMDMA
+; Set PPUCTRL register
+    LDA scroll_page
+    ORA #%10000000
+    STA PPUCTRL
 
     RTI  ;Return from interrupt
 
