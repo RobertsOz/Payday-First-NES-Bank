@@ -38,7 +38,7 @@ BULLET_DIRECTION_DOWN   = %00000001
 
 BULLET_ACTIVE_BOOLEAN   = %10000000
 BULLET_DESTROY_BOOLEAN  = %01000000
-BULLET_SPEED            = 1
+BULLET_SPEED            = 3
 
 SPRITE_TOP_ATTRIBUTE    = %00000000
 SPRITE_BOTTOM_ATTRIBUTE = %00000001
@@ -51,6 +51,7 @@ SCREEN_TOP_Y    = 1
 SCREEN_BOTTOM_Y = 224
 
     .rsset $0000
+current_gamestate       .rs 1
 joypad1_state           .rs 1
 player_direction        .rs 1   ;8 bits only %0000XXXX if there is a 1 then player is facing that direction LEFT=%00001000 UP=%00000100 RIGHT=%00000010 DOWN=%00000001
 bullet_info             .rs 1   ;bullet_active=%X0000000 and bullet_destroy=%0X000000 and bullet_direction=%0000XXXX
@@ -132,7 +133,7 @@ vblankwait2:
 
     LDA #0
     STA PPUSCROLL ;Set x scroll
-    Sta PPUSCROLL ;Set y scroll
+    STA PPUSCROLL ;Set y scroll
 
 
 ;Infinite loop
@@ -140,7 +141,7 @@ forever:
     JMP forever
 
 ;--------------------
-Initialise_Game: ;Start subroutine
+Initialise_Game: ;Start Initialise_Game subroutine
     
     ; Reset the PPU high/low latch
     LDA PPUSTATUS
@@ -164,22 +165,18 @@ Initialise_Game: ;Start subroutine
     ; Write the bg color for bank
     LDA #$0F
     STA PPUDATA
-    LDA #$39
+    LDA #$26
     STA PPUDATA
     LDA #$38
     STA PPUDATA
     LDA #$15
     STA PPUDATA
 
-
-
-
     ; Write adress 3f10 to the PPU (Sprite pallet)
     LDA #$3F
     STA PPUADDR
     LDA #$10
     STA PPUADDR
-
 
     ; Write the pallet color for player top sprite
     LDA #$0F          ;bg color is transparency
@@ -211,40 +208,27 @@ Initialise_Game: ;Start subroutine
     LDA #$29
     STA PPUDATA
 
-
-
-    ;Write sprite data for sprite_player_top
-    LDA #120    ;Y pos
-    STA sprite_player_top + SPRITE_Y
-    LDA #$04      ;Tile number
-    STA sprite_player_top + SPRITE_TILE
-    LDA #0      ;Attribute
-    STA sprite_player_top + SPRITE_ATTRIB
-    LDA #128    ;X pos
-    STA sprite_player_top + SPRITE_X
-
-    ;Write sprite data for sprite_player_bottom
-    LDA #128    ;Y pos
-    STA sprite_player_bottom + SPRITE_Y
-    LDA #$14      ;Tile number
-    STA sprite_player_bottom + SPRITE_TILE
-    LDA #1      ;Attribute
-    STA sprite_player_bottom + SPRITE_ATTRIB
-    LDA #128    ;X pos
-    STA sprite_player_bottom + SPRITE_X
-
-    
-
+    ;Set gamestate to 0 /there is a 0 in the accumulator from sprite_player_top Attribute/
+    STA current_gamestate ;Set current gamestate to 0
     ;Set player direction LEFT, because that is the direction the sprites start
     LDA #PLAYER_DIRECTION_LEFT
     STA player_direction
-    ;Load nametable data 1
+
+    
+    
+    JSR LoadNametable
+
+    
+
+    RTS ;End Initialise_Game subroutine
+;-------------------- LoadNametable subroutine
+LoadNametable:
+;Load nametable data for Title Screen
 
     LDA #$20           ;Write adress $2000 to PPuADDR register
     STA PPUADDR
     LDA #$00
     STA PPUADDR
-
     
     LDA #LOW(NametableData)
     STA nametable_adress
@@ -262,11 +246,7 @@ LoadNametable_InnerLoop:
     JMP LoadNametable_OuterLoop
 LoadNametable_End:
 
-    
-
-    ;Generate initial level
-
-    ;Load attribute data
+;Load attribute data for TitleScreen
     LDA #$23           ;Write adress $23C0 to PPuADDR register
     STA PPUADDR
     LDA #$C0
@@ -278,10 +258,44 @@ LoadAttributes_Loop:
     STA PPUDATA
     DEX
     BNE LoadAttributes_Loop
+;-----Bank Data
+;Load nametable For Bank
+
+    LDA #$24           ;Write adress $2400 to PPuADDR register
+    STA PPUADDR
+    LDA #$00
+    STA PPUADDR
+    
+    LDA #LOW(BankNametableData)
+    STA nametable_adress
+    LDA #HIGH(BankNametableData)
+    STA nametable_adress+1
+LoadNametable2_OuterLoop:
+    LDY #0
+LoadNametable2_InnerLoop:
+    LDA [nametable_adress], y
+    BEQ LoadNametable2_End
+    STA PPUDATA
+    INY
+    BNE LoadNametable2_InnerLoop
+    INC nametable_adress+1
+    JMP LoadNametable2_OuterLoop
+LoadNametable2_End:
+    ;Load attribute For Bank
+    LDA #$27           ;Write adress $27C0 to PPuADDR register
+    STA PPUADDR
+    LDA #$C0
+    STA PPUADDR
+
+    LDA #%01010101
+    LDX #64
+LoadAttributes2_Loop:
+    STA PPUDATA
+    DEX
+    BNE LoadAttributes2_Loop
 
 
-
-    RTS ;End subroutine
+    RTS ;End of LoadNametable Subroutine
 ;--------------------
 NametableData:
     .db $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF 
@@ -317,45 +331,40 @@ NametableData:
     .db $00 ;null terminator
 ;--------------------
 ;--------------------
-; NametableData:
-;     .db $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21 
-;     .db $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10 
-;     .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
-;     .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
-;     .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
-;     .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23
-;     .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23
-;     .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
-;     .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
-;     .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
-;     .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23
-;     .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
-;     .db $30, $43, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $44 
-;     .db $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41 
-;     .db $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $30, $30, $30, $30, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31 
-;     .db $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $23, $30, $30, $13, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11 
-;     .db $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $11, $23, $30, $30, $13, $11, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20 
-;     .db $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $11, $23, $30, $30, $13, $11, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10 
-;     .db $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $11, $23, $30, $30, $13, $11, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20 
-;     .db $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $11, $23, $30, $30, $13, $11, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10 
-;     .db $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $23, $30, $30, $13, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11 
-;     .db $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $30, $30, $30, $30, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32 
-;     .db $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $30, $30, $30, $30, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31 
-;     .db $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $23, $30, $30, $13, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11 
-;     .db $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $11, $23, $30, $30, $13, $11, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20 
-;     .db $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $11, $23, $30, $30, $13, $11, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10 
-;     .db $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $11, $23, $30, $30, $13, $11, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20
-;     .db $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $11, $23, $30, $30, $13, $11, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10 
-;     .db $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $11, $23, $30, $30, $13, $11, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20
-;     .db $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $11, $23, $30, $30, $13, $11, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10 
-;     .db $00 ;null terminator
-;--------------------
-
-; NMI called every frame
-NMI:
-
-
-
+BankNametableData:
+    .db $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21, $21 
+    .db $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10 
+    .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
+    .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
+    .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
+    .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23
+    .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23
+    .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
+    .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
+    .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
+    .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23
+    .db $30, $13, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $42, $23 
+    .db $30, $43, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $33, $44 
+    .db $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41, $41 
+    .db $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $30, $30, $30, $30, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31 
+    .db $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $23, $30, $30, $13, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11 
+    .db $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $11, $23, $30, $30, $13, $11, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20 
+    .db $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $11, $23, $30, $30, $13, $11, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10 
+    .db $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $11, $23, $30, $30, $13, $11, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20 
+    .db $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $11, $23, $30, $30, $13, $11, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10 
+    .db $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $23, $30, $30, $13, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11 
+    .db $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $30, $30, $30, $30, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32, $32 
+    .db $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $30, $30, $30, $30, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31, $31 
+    .db $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $23, $30, $30, $13, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11, $11 
+    .db $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $11, $23, $30, $30, $13, $11, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20 
+    .db $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $11, $23, $30, $30, $13, $11, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10 
+    .db $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $11, $23, $30, $30, $13, $11, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20
+    .db $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $11, $23, $30, $30, $13, $11, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10 
+    .db $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $11, $23, $30, $30, $13, $11, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20
+    .db $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $11, $23, $30, $30, $13, $11, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10, $20, $10 
+    .db $00 ;null terminator
+;-------------------- ReadInput Subroutine
+ReadInput:
 ;Init first controller
     LDA #1
     STA JOYPAD1
@@ -372,6 +381,11 @@ ReadController:
     INX
     CPX #8 ;Compare if X is 8
     BNE ReadController
+
+    RTS ;End ReadInput Subroutine
+;-------------------- Movement Subroutine
+Movement:
+
 
 
 ;React to RIGHT button
@@ -435,6 +449,9 @@ ReadUP_Done: ;end if
     STA player_direction                ;Write it into player direction
 ReadDOWN_Done: ;end if
 
+    RTS ; Movement Subroutine END
+;--------------------   Update sprite direction Subroutine
+UpdateSpriteDirection:
 ;Update player_sprite_tile based on the current player_direction
     ;Reset the flip of sprites incase it was flipped.
     LDA #SPRITE_TOP_ATTRIBUTE
@@ -480,9 +497,10 @@ Direction_Down:
     LDA #$16
     STA sprite_player_bottom+SPRITE_TILE
 Direction_Set:
-    
 
-
+    RTS ;End of UpdateSpriteDirection Subroutine
+;-------------------- ShootInput Subroutine
+ShootInput:
 ;React to A button
     LDA joypad1_state
     AND #BUTTON_A
@@ -559,7 +577,10 @@ Shoot_Down:
     STA sprite_bullet + SPRITE_X
 ReadA_End: ;end if
 
-;Update bullet
+    RTS ;End of ShootInput Subroutine
+;--------------------   UpdateBullet Subroutine
+UpdateBullet:
+    ;Update bullet
     LDA bullet_info
     AND #BULLET_ACTIVE_BOOLEAN
     BEQ UpdateBullet_End
@@ -571,7 +592,7 @@ ReadA_End: ;end if
     SEC
     SBC #BULLET_SPEED
     STA sprite_bullet + SPRITE_X
-    JMP UpdateBullet_Done
+    JMP Destroy_Negative
 UpdateBullet_Up:
     LDA bullet_info
     AND #BULLET_DIRECTION_UP
@@ -580,7 +601,7 @@ UpdateBullet_Up:
     SEC
     SBC #BULLET_SPEED
     STA sprite_bullet + SPRITE_Y
-    JMP UpdateBullet_Done
+    JMP Destroy_Negative
 UpdateBullet_Right:
     LDA bullet_info
     AND #BULLET_DIRECTION_RIGHT
@@ -589,30 +610,106 @@ UpdateBullet_Right:
     CLC
     ADC #BULLET_SPEED
     STA sprite_bullet + SPRITE_X
-    JMP UpdateBullet_Done
+    JMP Destroy_Positive
 UpdateBullet_Down:
     LDA sprite_bullet + SPRITE_Y
     CLC
     ADC #BULLET_SPEED
     STA sprite_bullet + SPRITE_Y
-UpdateBullet_Done:
-
-UpdateBullet_Destroy_Left:
-    LDA sprite_bullet + SPRITE_X
-    CMP #SCREEN_LEFT_X
-    BNE UpdateBullet_Destroy_Up
-    JMP Destroy_bullet
-UpdateBullet_Destroy_Up:
-    LDA sprite_bullet + SPRITE_Y
-    CMP #SCREEN_TOP_Y
-    BNE UpdateBullet_End
-Destroy_bullet:
+Destroy_Positive: ;Destroy the bullet Positive overflowed
+    BCC UpdateBullet_End
     LDA #0
     STA bullet_info
+    JMP UpdateBullet_End
+Destroy_Negative: ;Destroy the bullet Negative overflowed
+    BCS UpdateBullet_End
+    LDA #0
+    STA sprite_bullet+SPRITE_X ;Set bullet X to 0 so the bullet doesn't poke out of the right side of the screen
+    STA bullet_info
+; UpdateBullet_Destroy_Left:
+;     LDA sprite_bullet + SPRITE_X
+;     CMP #SCREEN_LEFT_X
+;     BNE UpdateBullet_Destroy_Up
+;     JMP Destroy_bullet
+; UpdateBullet_Destroy_Up:
+;     LDA sprite_bullet + SPRITE_Y
+;     CMP #SCREEN_TOP_Y
+;     BNE UpdateBullet_End
+; Destroy_bullet:
+;     LDA #0
+;     STA bullet_info
+; UpdateBullet_End:
+;Destroy the bullet Positive overflowed
+
+
 UpdateBullet_End:
+    
+    RTS ;End of UpdateBullet Subroutine
+
+
+;-------------------- Initialise Player Subroutine
+Initialise_Player:
+;Write sprite data for sprite_player_bottom
+    LDA #208    ;Y pos
+    STA sprite_player_bottom + SPRITE_Y
+    LDA #$14      ;Tile number
+    STA sprite_player_bottom + SPRITE_TILE
+    LDA #1      ;Attribute
+    STA sprite_player_bottom + SPRITE_ATTRIB
+    LDA #128    ;X pos
+    STA sprite_player_bottom + SPRITE_X
+    
+    ;Write sprite data for sprite_player_top
+    LDA #200    ;Y pos
+    STA sprite_player_top + SPRITE_Y
+    LDA #$04      ;Tile number
+    STA sprite_player_top + SPRITE_TILE
+    LDA #128    ;X pos
+    STA sprite_player_top + SPRITE_X
+    LDA #0      ;Attribute
+    STA sprite_player_top + SPRITE_ATTRIB
+    RTS ;End Initialise_Player Subroutine
+;--------------------
+; NMI called every frame
+NMI:
+    LDA current_gamestate
+;Gamestate_TitleScreen:
+    CMP #$00    ;TitleScreen Gamestate
+    BNE Gamestate_Bank_0
+    JMP TitleScreen
+Gamestate_Bank_0:
+    CMP #$01    ;Bank_0 Gamestate
+    BNE Gamestate_Bank_1
+    JMP Bank_0
+Gamestate_Bank_1:
+
+
+TitleScreen:    ;Gamestate $00
+    JSR ReadInput
+
+    LDA joypad1_state
+    AND #BUTTON_START       ;React to Start Press
+    BEQ ReadStart_Done      ;If recieve input do this, else jump to ReadStart_Done
+    LDA #255
+    STA PPUSCROLL           ;Set x scroll
+    JSR Initialise_Player   ;Draw player
+    LDA #$01
+    STA current_gamestate   ;Switch Gamestate
+ReadStart_Done:             ;End If
+
+    JMP NMI_End             ;Do NMI Loop
+
+Bank_0:         ;Gamestate $01
+    JSR ReadInput               ;Jump to subroutine to Read Input of the controller
+    JSR Movement                ;Jump to subroutine to Reacto to directional pad input
+    JSR UpdateSpriteDirection   ;Jump to subroutine to Update Sprite direction based on the last input (from Controls subroutine)
+    JSR ShootInput              ;Jump to subroutine to Read if A has been pressed, then shoot a bullet in the direction the player is facing
+    JSR UpdateBullet            ;Jump to subroutine to Update the bullet in the direction it was shot
+    
+    JMP NMI_End                 ;Do NMI Loop
 
     
-
+NMI_End:
 ;Copy sprite data to the PPU
     LDA #0
     STA OAMADDR
